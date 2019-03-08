@@ -24,3 +24,7 @@ and then run on your **host** machine
 ```
 rosrun rqt_graph rqt_graph
 ```
+
+## TODO
+
+1. Filter messages in Logstash pipelines
