@@ -1,0 +1,107 @@
+version: '2'
+services:
+
+  ######################################################################################
+  # ROS Containers
+  ######################################################################################
+  master:
+    image: ros:melodic
+    container_name: master
+    ports:
+      - "11311:11311"
+    volumes:
+      - roslogs:/root/.ros/log/
+    command:
+      - roscore
+
+  talker:
+    build: ./talker
+    container_name: talker
+    depends_on:
+      - master
+    environment:
+      - "ROS_HOSTNAME=talker"
+      - "ROS_MASTER_URI=http://master:11311"
+    volumes:
+      - roslogs:/root/.ros/log/
+    command: /bin/bash -c "source /ros_ws/devel/setup.bash && rosrun talker talker.py"
+
+  listener:
+    build: ./listener
+    container_name: listener
+    depends_on:
+      - master
+    environment:
+      - "ROS_HOSTNAME=listener"
+      - "ROS_MASTER_URI=http://master:11311"
+    volumes:
+      - roslogs:/root/.ros/log/
+    command: /bin/bash -c "source /ros_ws/devel/setup.bash && rosrun listener listener.py"
+
+
+  ######################################################################################
+  # ELK Stack Containers
+  ######################################################################################
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.6.1
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      - cluster.name=docker-cluster
+      - network.host=0.0.0.0
+      - discovery.zen.minimum_master_nodes=1
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    networks:
+      - elk
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:6.6.1
+    volumes:
+      - ./elk-stack/pipeline:/usr/share/logstash/pipeline:ro
+    ports:
+      - "5044:5044"
+      - "9600:9600"
+    environment:
+      - http.host="0.0.0.0"
+      - path.config=/usr/share/logstash/pipeline
+    networks:
+      - elk
+    depends_on:
+      - elasticsearch
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:6.6.1
+    volumes:
+      - ./elk-stack/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - roslogs:/var/log/roslogs/
+    networks:
+      - elk
+    command: filebeat -e -strict.perms=false
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:6.6.1
+    environment:
+      - server.name=kibana
+      - server.host="0"
+      - elasticsearch.url=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    networks:
+      - elk
+    depends_on:
+      - elasticsearch
+
+
+networks:
+  elk:
+    driver: bridge
+
+volumes:
+  roslogs:
+  esdata:
+    driver: local
