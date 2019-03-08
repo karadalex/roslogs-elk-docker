@@ -1,4 +1,4 @@
-Talker & Listener Docker ROS
+ROS Logs & ELK Stack
 ============================
 
 ## How it works
